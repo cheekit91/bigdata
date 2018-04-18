@@ -15,10 +15,6 @@ import os
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# NEO4J_RESOURCE_URI = 'bolt://localhost:7687'
-# NEO4J_USERNAME = 'neo4j'
-# NEO4J_PASSWORD = 'root'
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.10/howto/deployment/checklist/
 
@@ -28,10 +24,7 @@ SECRET_KEY = ''
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [u'ec2-54-191-219-44.us-west-2.compute.amazonaws.com']
-# ALLOWED_HOSTS = [u'192.168.1.10']
-# ALLOWED_HOSTS = [u'192.168.1.11']
-# ALLOWED_HOSTS = [u'209.2.212.131']
+ALLOWED_HOSTS = [u'192.168.1.10']
 
 
 # Application definition
