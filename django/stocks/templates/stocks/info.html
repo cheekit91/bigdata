@@ -26,6 +26,7 @@
 
   <div class="col-12 col-sm-12 col-lg-12">
   <ul class="nav nav-tabs" id="myTab">
+      <li><a data-toggle="tab" href="#Marketshare">Marketshare</a></li>
       <li><a data-toggle="tab" href="#Competitor">Competitor</a></li>
       <li><a data-toggle="tab" href="#StakeHolder">StakeHolder</a></li>
       <li><a data-toggle="tab" href="#BoardMember">BoardMember</a></li>
@@ -41,7 +42,12 @@
   {% endif %}
 
   <div id="content" class="tab-content">
-    <div id="Competitor" class="tab-pane in active" style="width: 100%;height: 100%;overflow: auto; ">
+    <div id="Marketshare" class="tab-pane fade in active" style="width: 100%;height: 100%;overflow: auto; ">
+    {% if piechart %}
+    {{ piechart|safe }}
+    {% endif %}
+    </div>
+    <div id="Competitor" class="tab-pane fade in active" style="width: 100%;height: 100%;overflow: auto; ">
     {% if graph %}
     {{ graph|safe }}
     {% endif %}
