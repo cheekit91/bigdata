@@ -4,7 +4,7 @@ from .forms import StockForm
 import json
 import requests
 
-from multiprocessing import Process,Manager
+from multiprocessing import Process,Manager, Value
 
 from plotly.graph_objs import *
 from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
@@ -22,7 +22,7 @@ from py2neo import Node, Relationship
 def convertInt(input):
     return int(re.sub("[^\d\.]", "", input)) #remove commas
 
-def getCompetitorInfo(ticker,tickerNameBB,competitorName):
+def getCompetitorInfo(ticker,tickerNameBB,competitorName,marketCap):
     try:
         html_page = urllib2.urlopen("https://www.nasdaq.com/symbol/%s/competitors"%ticker.lower())
         soup = BeautifulSoup(html_page,"html.parser")
@@ -37,47 +37,85 @@ def getCompetitorInfo(ticker,tickerNameBB,competitorName):
             html_page = urllib2.urlopen("https://www.nasdaq.com/symbol/%s/competitors?page=%s"%(ticker.lower(),str(i+1)))
             soup = BeautifulSoup(html_page,"html.parser")
             competitors=soup.find("div", {"class": "genTable thin"})
+            tableBody=competitors.find("tbody").findAll("tr")
+
             competitorNameRecords=competitors.findAll("td",{"class":"TalignL"})
-            for name in competitorNameRecords:
+            for idx,name in enumerate(competitorNameRecords):
                 cName=name.get_text().split(name.find("a").get_text())[0]
                 if(cName!=ownName and cName!=''):
+                    marketCap.append(convertInt(tableBody[idx].findAll('td')[7].get_text()))
                     competitorName.append(cName)
+                if(cName==ownName):
+                    ownMarketCap=convertInt(tableBody[idx].findAll('td')[7].get_text())
+
+        marketCap.insert(0,ownMarketCap)
     except:
         pass
 
     
 
-def getStakeHolderInfo(ticker,tickerNameBB,stakeHoldersName):
+def getStakeHolderInfo(ticker,tickerNameBB,stakeHoldersName,OverallPR):
     # stakeHoldersShare=[]
-    try:
-        html_page = urllib2.urlopen("https://www.nasdaq.com/symbol/%s/institutional-holdings"%ticker.lower())
-        soup = BeautifulSoup(html_page,"html.parser")
-        lastPageInfo=soup.find("a",{"id":"quotes_content_left_lb_LastPage"})
-        if(lastPageInfo==None): #if there is no second page
-            lastPage=1
-        else:
-            lastPage=int(lastPageInfo.get('href').split('=')[-1])
+    # stakeHoldersShare=[]
+    html_page = urllib2.urlopen("https://www.nasdaq.com/symbol/%s/institutional-holdings"%ticker.lower())
+    soup = BeautifulSoup(html_page,"html.parser")
+    lastPageInfo=soup.find("a",{"id":"quotes_content_left_lb_LastPage"})
+    if(lastPageInfo==None): #if there is no second page
+        lastPage=1
+    else:
+        lastPage=int(lastPageInfo.get('href').split('=')[-1])
 
-        for i in range(lastPage): 
-            html_page = urllib2.urlopen("https://www.nasdaq.com/symbol/%s/institutional-holdings?page=%s"%(ticker.lower(),str(i+1)))
-            soup = BeautifulSoup(html_page,"html.parser")
-            stakeholders=soup.find("div", {"id": "quotes_content_left_pnlInsider"})
-            pred = lambda tag: tag.parent.find('thead')
-            stakeHoldersRecords=filter(pred,stakeholders.findAll("tr"))
-            totalStockInfo=soup.find("div",{"class":"header-tabs-div paddingT15px"})
-            totalNumberOfStocks=totalStockInfo.find("h4").find("span",id="quotes_content_left_totalheld").get_text().split(" Total Shares Held")[0]
-            totalNumberOfStocks=convertInt(totalNumberOfStocks)
-            for name in stakeHoldersRecords:
-                records=name.findAll("td")
-                amountOfSharesHold=1.0/totalNumberOfStocks*convertInt(records[2].get_text())
-                if(amountOfSharesHold<0.01):
-                    break
-                stakeHoldersName.append(records[0].find("a").get_text())
-                # stakeHoldersShare.append(amountOfSharesHold)
+    threads = []
+    PROverLink=[]
+    percentShares=[]
+    idxRecord=0
+    for i in range(lastPage): 
+        html_page = urllib2.urlopen("https://www.nasdaq.com/symbol/%s/institutional-holdings?page=%s"%(ticker.lower(),str(i+1)))
+        soup = BeautifulSoup(html_page,"html.parser")
+        stakeholders=soup.find("div", {"id": "quotes_content_left_pnlInsider"})
+        pred = lambda tag: tag.parent.find('thead')
+        stakeHoldersRecords=filter(pred,stakeholders.findAll("tr"))
+        totalStockInfo=soup.find("div",{"class":"header-tabs-div paddingT15px"})
+        totalNumberOfStocks=totalStockInfo.find("h4").find("span",id="quotes_content_left_totalheld").get_text().split(" Total Shares Held")[0]
+        totalNumberOfStocks=convertInt(totalNumberOfStocks)
+
+        for idx,name in enumerate(stakeHoldersRecords):
+            records=name.findAll("td")
+            amountOfSharesHold=1.0/totalNumberOfStocks*convertInt(records[2].get_text())
             if(amountOfSharesHold<0.01):
                 break
-    except:
-        pass
+            percentShares.append(amountOfSharesHold)
+
+            threads.append(None)
+            PROverLink.append(None)
+            a=records[0].find("a")
+            link=a.get("href")
+            threads[idx+idxRecord] = Thread(target=getInsitutionalInfo, args=(link,PROverLink,idx+idxRecord))
+            threads[idx+idxRecord].start()
+
+            stakeHoldersName.append(a.get_text())
+
+        idxRecord=len(threads)
+            # stakeHoldersShare.append(amountOfSharesHold)
+        if(amountOfSharesHold<0.01):
+            break
+    
+    for i in range(len(threads)):
+        threads[i].join()
+
+    for idx,shares in enumerate(percentShares):
+        if(shares!=None):
+            OverallPR.value+=PROverLink[idx]*shares
+
+
+def getInsitutionalInfo(link,result,index):
+    html_page = urllib2.urlopen(link)
+    soup = BeautifulSoup(html_page,"html.parser")
+    resultTable=soup.find("tr",{"id":"position-stats-results"})
+    if(soup.findAll("td")[1]==None):
+        result[index]=None
+    else:
+        result[index]=1.0/convertInt(soup.findAll("td")[1].get_text())*convertInt(resultTable.findAll("td")[-1].get_text())
 
 
 
@@ -432,7 +470,7 @@ def info(request):
     ticker=findTicker(s)
     if(ticker!=None):
         tickerNameBB=findCompanyNameFromBloomberg(ticker)
-        authenticate("localhost:7474", "neo4j", "")
+        authenticate("localhost:7474", "neo4j", "root")
         graph = Graph()
         graph.delete_all()
         tx=graph.begin()
@@ -453,12 +491,14 @@ def info(request):
         proc.start()
 
         competitorName = Manager().list()
-        proc = Process(target=getCompetitorInfo, args=(ticker,tickerNameBB,competitorName))
+        marketCap = Manager().list()
+        proc = Process(target=getCompetitorInfo, args=(ticker,tickerNameBB,competitorName,marketCap))
         procs.append(proc)
         proc.start()
 
         stakeHoldersName = Manager().list()
-        proc = Process(target=getStakeHolderInfo, args=(ticker,tickerNameBB,stakeHoldersName))
+        OverallPR = Value('d', 0)
+        proc = Process(target=getStakeHolderInfo, args=(ticker,tickerNameBB,stakeHoldersName,OverallPR))
         procs.append(proc)
         proc.start()
 
@@ -493,6 +533,7 @@ def info(request):
 
         summarized_text=""
         summarized_text+="There are %s nodes in total.\n"%str(graph.evaluate("MATCH (n) RETURN count(*)"))
+        summarized_text+="The computed value (based on pagerank analysis of stakeholders) of the company is %0.2f millions.\n"%OverallPR.value
         summarized_text+="There are %d Competitors in the same industry.\n"%len(competitorName)
         summarized_text+="There are %d Stakeholders(with more than 1 percent shares).\n"%len(stakeHoldersName)
         summarized_text+="There are %d Boardmembers in the company:\n"%len(companyBoardInfo)
@@ -502,7 +543,15 @@ def info(request):
         summarized_text+="---Each Executives has an average number of %d past career in other companies.\n"%avgexecutivecareerhistory
         summarized_text+="---Each Executives has an average number of %d board membership experiences in other companies.\n"%avgexecutiveboardmembership
 
-        context={'input_string':s,'graph':div1,'graph2':div2,'graph3':div3,'graph4':div4,'graph5':div5,'summarized_text':summarized_text}
+        labels = [x for x in competitorName]
+        labels.insert(0,tickerNameBB)
+        values = [x for x in marketCap]
+
+        trace = graph_objs.Pie(labels=labels, values=values,textinfo='none')
+        fig = Figure(data=Data([trace]))
+        piechart=plot(fig,auto_open=False,output_type='div')
+
+        context={'input_string':s,'piechart':piechart,'graph':div1,'graph2':div2,'graph3':div3,'graph4':div4,'graph5':div5,'summarized_text':summarized_text}
         # context={'input_string':s,'graph':div1}
     else:
         context={'input_string':s}
