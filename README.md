@@ -1,7 +1,7 @@
 # bigdata
 This is a project written to fulfill the requirements of Advanced Big Data Analytics.
 
-## Django
+## django
 This is the folder containing codes up to milestone 3 changes.
 
 The html server can be executed by running the manage.py in django folder.
