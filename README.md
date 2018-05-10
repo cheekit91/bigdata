@@ -15,7 +15,9 @@ Please generate your unique secret key for django server, update the allowed_hos
 
 ## django_final_proj
 This is the folder containing codes up to final project changes.
-
+![Screenshot](HomepageScreenshot.png)
+![Screenshot](NewsAnalysisScreenshot.png)
+![Screenshot](StocksAnalysisScreenshot.png)
 The html server can be executed by running the manage.py in django folder.
 
 For security reasons:
